@@ -1,110 +1,99 @@
 /**
- * chatbot.js — Chatbot integration module
+ * chatbot.js — AWS Bedrock Knowledge Base (RAG) integration
  *
  * Single exported function:
  *   getChatbotResponse(userText, sessionId) → Promise<string>
  *
- * This is the ONLY file that knows which backend is answering.
- * The rest of the server calls this function and never looks inside.
+ * Calls the Bedrock RetrieveAndGenerate API with the Hartnell College
+ * knowledge base. Returns a plain-text answer grounded in the KB documents.
  *
- * Current implementation: Hartnell Bedrock chatbot via its FastAPI endpoint.
- * POST /ask  — application/x-www-form-urlencoded — { query, pair_id }
- * Returns an HTML fragment; we strip tags to get plain text.
- *
- * To swap in a different backend later, replace the body of this file
- * without touching anything else.
+ * Environment variables required:
+ *   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
+ *   BEDROCK_KNOWLEDGE_BASE_ID, BEDROCK_MODEL_ARN
+ *   BEDROCK_GUARDRAIL_ID, BEDROCK_GUARDRAIL_VERSION (optional)
  */
 
-import https from 'https';
-import querystring from 'querystring';
-import { parse } from 'node-html-parser';
+import {
+  BedrockAgentRuntimeClient,
+  RetrieveAndGenerateCommand,
+} from '@aws-sdk/client-bedrock-agent-runtime';
 
-const CHATBOT_HOST = 'hartnell-gpt-alb-99053878.us-west-2.elb.amazonaws.com';
-const CHATBOT_PATH = '/ask';
+// ─── Client setup ─────────────────────────────────────────────────────────────
 
-/**
- * Strip HTML tags and clean up whitespace from the bot's HTML fragment,
- * preserving link URLs inline so facts aren't lost.
- *
- * e.g. <a href="https://example.com">click here</a>
- *      → "click here (https://example.com)"
- */
-function htmlToPlainText(html) {
-  const root = parse(html);
+const client = new BedrockAgentRuntimeClient({
+  region: process.env.AWS_REGION || 'us-west-2',
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
+});
 
-  // Replace <a> tags with "text (url)" so URLs survive stripping
-  root.querySelectorAll('a').forEach(a => {
-    const href = a.getAttribute('href') || '';
-    const text = a.text.trim();
-    if (href && href !== text) {
-      a.replaceWith(`${text} (${href})`);
-    }
-  });
+// ─── Build the model ARN ──────────────────────────────────────────────────────
 
-  // Remove the thumbs-up/down feedback buttons — not part of the answer
-  root.querySelectorAll('.feedback-buttons').forEach(el => el.remove());
-
-  // Get the inner text of the .message-content div if present, else full text
-  const contentEl = root.querySelector('.message-content');
-  const raw = (contentEl ?? root).text;
-
-  // Normalise whitespace: collapse runs of blanks, trim
-  return raw
-    .replace(/\r\n/g, '\n')
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+function getModelArn() {
+  const model = process.env.BEDROCK_MODEL_ARN || 'us.amazon.nova-pro-v1:0';
+  // If it's already a full ARN, use as-is
+  if (model.startsWith('arn:')) return model;
+  // The API accepts bare model IDs directly (e.g. us.amazon.nova-pro-v1:0)
+  return model;
 }
 
-/**
- * Make a POST /ask request to the Hartnell chatbot.
- * Returns the raw response body as a string.
- */
-function postToHartnell(query, pairId) {
-  return new Promise((resolve, reject) => {
-    const body = querystring.stringify({ query, pair_id: pairId });
-
-    const options = {
-      hostname: CHATBOT_HOST,
-      path: CHATBOT_PATH,
-      method: 'POST',
-      rejectUnauthorized: false, // ALB uses a self-signed cert
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Content-Length': Buffer.byteLength(body),
-      },
-    };
-
-    const req = https.request(options, res => {
-      let data = '';
-      res.on('data', chunk => (data += chunk));
-      res.on('end', () => {
-        if (res.statusCode !== 200) {
-          reject(new Error(`Chatbot returned HTTP ${res.statusCode}: ${data}`));
-        } else {
-          resolve(data);
-        }
-      });
-    });
-
-    req.on('error', reject);
-    req.setTimeout(15000, () => {
-      req.destroy(new Error('Chatbot request timed out after 15s'));
-    });
-
-    req.write(body);
-    req.end();
-  });
-}
+// ─── Main exported interface ──────────────────────────────────────────────────
 
 /**
- * Main exported interface.
- *
  * @param {string} userText   — the user's raw question
- * @param {string} sessionId  — unique per-session or per-message ID (used as pair_id)
- * @returns {Promise<string>} — plain-text answer from the chatbot
+ * @param {string} sessionId  — unique per-session ID (maintains conversation context)
+ * @returns {Promise<string>} — plain-text answer from the knowledge base
  */
 export async function getChatbotResponse(userText, sessionId) {
-  const html = await postToHartnell(userText, sessionId);
-  return htmlToPlainText(html);
+  const knowledgeBaseId = process.env.BEDROCK_KNOWLEDGE_BASE_ID;
+  const modelArn        = getModelArn();
+
+  if (!knowledgeBaseId) {
+    throw new Error('BEDROCK_KNOWLEDGE_BASE_ID is not set in .env');
+  }
+
+  const input = {
+    input: { text: userText },
+    retrieveAndGenerateConfiguration: {
+      type: 'KNOWLEDGE_BASE',
+      knowledgeBaseConfiguration: {
+        knowledgeBaseId,
+        modelArn,
+      },
+    },
+  };
+
+  // Note: sessionId is intentionally omitted for single-turn queries.
+  // Bedrock creates a session on first call and returns it in the response.
+  // For multi-turn conversations, store and pass the returned sessionId.
+
+  // Add guardrail if configured
+  const guardrailId      = process.env.BEDROCK_GUARDRAIL_ID;
+  const guardrailVersion = process.env.BEDROCK_GUARDRAIL_VERSION;
+  if (guardrailId) {
+    input.retrieveAndGenerateConfiguration.knowledgeBaseConfiguration.guardrailConfiguration = {
+      guardrailId,
+      guardrailVersion: guardrailVersion || 'DRAFT',
+    };
+  }
+
+  console.log(`[chatbot] querying Bedrock KB (model=${modelArn}, kb=${knowledgeBaseId})`);
+
+  try {
+    const command  = new RetrieveAndGenerateCommand(input);
+    const response = await client.send(command);
+
+    const answer = response.output?.text;
+    if (!answer) {
+      console.warn('[chatbot] Bedrock returned no text in output');
+      return 'I could not find an answer to that question. Please contact the IT Help Desk for assistance.';
+    }
+
+    console.log(`[chatbot] got ${answer.length} chars from Bedrock`);
+    return answer;
+  } catch (err) {
+    console.error('[chatbot] Bedrock error:', err.message);
+    throw err;
+  }
 }

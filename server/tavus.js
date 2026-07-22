@@ -92,7 +92,11 @@ async function createPal(apiKey, replicaId, language, publicUrl, proxyKey) {
         model: `hartnell-chatbot-${lang}`,
         base_url: publicUrl,
         api_key: proxyKey || 'no-key',
-        speculative_inference: false, // wait for full user utterance before calling chatbot
+        speculative_inference: false,
+        extra_headers: {
+          'ngrok-skip-browser-warning': 'true',
+          'User-Agent': 'TavusCVI/1.0',
+        },
       },
     },
   };

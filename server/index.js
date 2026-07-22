@@ -21,6 +21,12 @@ const PORT = process.env.PORT || 4000;
 app.use(cors());
 app.use(express.json());
 
+// Bypass ngrok's free-tier browser interstitial warning
+app.use((req, res, next) => {
+  res.setHeader('ngrok-skip-browser-warning', 'true');
+  next();
+});
+
 // ---------------------------------------------------------------------------
 // POST /v2/chat/completions  (OpenAI-compatible LLM proxy for Tavus CVI)
 // Tavus calls this endpoint when the user speaks to the avatar.

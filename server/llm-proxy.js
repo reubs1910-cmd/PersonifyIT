@@ -122,6 +122,12 @@ export async function llmProxyHandler(req, res) {
 
   const completionId = `chatcmpl-${randomUUID()}`;
 
+  // Send an initial empty chunk immediately to keep the connection alive
+  // while we fetch from Bedrock + Gemini (can take 5-8s)
+  const keepAlive = setInterval(() => {
+    res.write(`: keepalive\n\n`);
+  }, 2000);
+
   try {
     console.log(`[llm-proxy] user said: "${userMessage.slice(0, 80)}…" (lang=${language}, model=${model || 'unknown'})`);
 
@@ -129,9 +135,11 @@ export async function llmProxyHandler(req, res) {
     const rawAnswer = await getChatbotResponse(userMessage, pairId);
     const spoken    = await conversationalRewrite(rawAnswer, language);
 
+    clearInterval(keepAlive);
     console.log(`[llm-proxy] streaming ${spoken.length} chars back to Tavus (lang=${language})`);
     streamText(res, spoken, completionId);
   } catch (err) {
+    clearInterval(keepAlive);
     console.error('[llm-proxy] error:', err.message);
 
     // Stream a graceful fallback so the avatar says something instead of freezing
