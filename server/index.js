@@ -15,7 +15,6 @@ import { createConversation, endConversation } from './tavus.js';
 import { llmProxyHandler } from './llm-proxy.js';
 // ── Session storage (email + rating feature) ──
 import sessionsRouter from './routes/sessions.js';
-import transcriptRouter from './routes/transcript.js';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -127,7 +126,6 @@ app.post('/api/chat', async (req, res) => {
 
 // ── Session storage (email + rating feature) ──
 app.use(sessionsRouter);
-app.use(transcriptRouter);
 
 // ---------------------------------------------------------------------------
 app.listen(PORT, () => {
