@@ -156,7 +156,6 @@ app.post('/api/chat', async (req, res) => {
 
 // ── Session storage (email + rating feature) ──
 app.use(sessionsRouter);
-app.use(transcriptRouter);
 
 // ---------------------------------------------------------------------------
 app.listen(PORT, () => {
