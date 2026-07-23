@@ -141,6 +141,7 @@ export default function ChatPanel({
   onConversationReady,
   onConversationLoading,
   onConversationError,
+  onMessagesChange, // ── (email/transcript feature) optional: emits message list upward
 }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput]       = useState('');
@@ -148,6 +149,12 @@ export default function ChatPanel({
   const bottomRef               = useRef(null);
   const conversationIdRef       = useRef(null);
   const palIdRef                = useRef(null);
+
+  // ── (email/transcript feature) mirror messages up to the parent so the
+  //    post-session panel can store the transcript. No-op if prop not passed.
+  useEffect(() => {
+    if (onMessagesChange) onMessagesChange(messages);
+  }, [messages, onMessagesChange]);
 
   // ── SSE: append sources bubble whenever the avatar finishes a speech turn ─
   useEffect(() => {

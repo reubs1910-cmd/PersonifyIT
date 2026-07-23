@@ -2,8 +2,8 @@ import { useState } from 'react';
 import LanguageSelect from './components/LanguageSelect.jsx';
 import ChatPanel from './components/ChatPanel.jsx';
 import VideoPanel from './components/VideoPanel.jsx';
-// ── Post-session rating (email + rating feature) ──
-import SessionRating from './components/SessionRating.jsx';
+// ── Post-session (email + rating feature) ──
+import PostSessionPanel from './components/PostSessionPanel.jsx';
 
 const styles = {
   app: {
@@ -47,8 +47,12 @@ export default function App() {
   const [conversationUrl, setConversationUrl]         = useState(null);
   const [conversationLoading, setConversationLoading] = useState(false);
   const [conversationError, setConversationError]     = useState(null);
-  // ── Post-session rating state ──
+  // ── Post-session state (email + rating feature) ──
   const [sessionEnded, setSessionEnded]               = useState(false);
+  const [transcript, setTranscript]                   = useState([]);
+  const [sessionId]                                   = useState(() =>
+    (crypto?.randomUUID?.() ?? `sess-${Date.now()}`)
+  );
 
   function handleLanguageSelect(lang) {
     setLanguage(lang);
@@ -121,6 +125,7 @@ export default function App() {
         <ChatPanel
           language={language}
           sessionStarted={sessionStarted}
+          onMessagesChange={setTranscript}
           onConversationReady={(url) => {
             setConversationUrl(url);
             setConversationLoading(false);
@@ -139,22 +144,16 @@ export default function App() {
         />
       </main>
 
-      {/* ── Post-session rating (email + rating feature) ───────────────── */}
+      {/* ── Post-session panel (email + rating feature) ─────────────────── */}
       {sessionEnded ? (
-        <SessionRating
+        <PostSessionPanel
           language={language}
-          onSubmit={(rating, reason) => {
-            fetch('/api/sessions', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                agentId: 'alex-it-support',
-                language,
-                rating,
-                lowRatingReason: reason,
-                transcript: [],
-              }),
-            }).catch(() => {});
+          sessionId={sessionId}
+          transcript={transcript}
+          agentId="alex-it-support"
+          onDone={() => {
+            setSessionEnded(false);
+            handleLanguageReset();
           }}
         />
       ) : (
