@@ -3,6 +3,7 @@ node_modules/
 .env.local
 dist/
 *.zip
+specs/
 
 # Session rating data (local dev only)
 server/data/sessions.json
