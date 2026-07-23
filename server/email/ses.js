@@ -53,9 +53,10 @@ function formatTranscript(transcript) {
  * @param {string} opts.to        — recipient email
  * @param {string} opts.language  — 'en' | 'es'
  * @param {Array}  opts.transcript — [{ role, text, ts }]
+ * @param {string} [opts.summary]  — optional Bedrock-generated recap
  * @param {string} [opts.agentId]
  */
-export async function sendTranscriptEmail({ to, language, transcript, agentId }) {
+export async function sendTranscriptEmail({ to, language, transcript, summary, agentId }) {
   const isSpanish = language === 'es';
 
   const subject = isSpanish
@@ -66,11 +67,17 @@ export async function sendTranscriptEmail({ to, language, transcript, agentId })
     ? 'Hola,\n\nAquí está la transcripción de tu conversación con el soporte de TI de Hartnell College:\n\n'
     : 'Hi there,\n\nHere\'s the transcript of your conversation with Hartnell College IT Support:\n\n';
 
+  // Optional Bedrock recap section, shown above the full transcript.
+  const summaryBlock = summary
+    ? (isSpanish ? 'RESUMEN:\n' : 'SUMMARY:\n') + summary + '\n\n' +
+      (isSpanish ? 'TRANSCRIPCIÓN COMPLETA:\n' : 'FULL TRANSCRIPT:\n')
+    : '';
+
   const footer = isSpanish
     ? '\n\n---\nSi necesitas más ayuda, visita hartnell.edu o contacta al IT Service Desk.\n\n— PersonifyIT, Hartnell College'
     : '\n\n---\nIf you need further help, visit hartnell.edu or contact the IT Service Desk.\n\n— PersonifyIT, Hartnell College';
 
-  const body = greeting + formatTranscript(transcript) + footer;
+  const body = greeting + summaryBlock + formatTranscript(transcript) + footer;
 
   const command = new SendEmailCommand({
     Source: FROM_EMAIL,

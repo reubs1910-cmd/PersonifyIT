@@ -18,6 +18,8 @@
 import { randomUUID } from 'crypto';
 import { getChatbotResponse } from './chatbot.js';
 import { conversationalRewrite } from './rewrite.js';
+// ── (email/transcript feature) capture the spoken video conversation ──
+import { addVideoExchange } from './video-transcript.js';
 
 /**
  * Extract the latest user message from an OpenAI messages array.
@@ -136,6 +138,8 @@ export async function llmProxyHandler(req, res) {
     const spoken    = await conversationalRewrite(rawAnswer, language);
 
     clearInterval(keepAlive);
+    // ── (email/transcript feature) record this video exchange for the transcript ──
+    addVideoExchange(userMessage, spoken);
     console.log(`[llm-proxy] streaming ${spoken.length} chars back to Tavus (lang=${language})`);
     streamText(res, spoken, completionId);
   } catch (err) {

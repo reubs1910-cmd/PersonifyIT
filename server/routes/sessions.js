@@ -10,6 +10,9 @@
 import { Router } from 'express';
 import { saveSession, getSessions } from '../db.js';
 import { sendTranscriptEmail } from '../email/ses.js';
+import { getVideoTranscript, clearVideoTranscript } from '../video-transcript.js';
+import { summarizeTranscript } from '../email/summarize.js';
+import { archiveSession } from '../storage/s3-archive.js';
 
 const router = Router();
 
@@ -24,6 +27,14 @@ router.post('/api/sessions', async (req, res) => {
     return res.status(400).json({ error: 'rating must be 1–5' });
   }
 
+  // Merge the typed chat transcript with the spoken video-call transcript,
+  // ordered chronologically by timestamp.
+  const chatTranscript = transcript || [];
+  const videoTranscript = getVideoTranscript();
+  const fullTranscript = [...chatTranscript, ...videoTranscript].sort(
+    (a, b) => new Date(a.ts || 0) - new Date(b.ts || 0)
+  );
+
   try {
     const record = await saveSession({
       sessionId,
@@ -32,19 +43,33 @@ router.post('/api/sessions', async (req, res) => {
       email: email || null,
       rating,
       lowRatingReason: rating <= 2 ? (lowRatingReason || null) : null,
-      transcript: transcript || [],
+      transcript: fullTranscript,
     });
+
+    // Clear the video buffer now that this session is saved.
+    clearVideoTranscript();
 
     res.status(201).json({ session: record });
 
-    // Fire-and-forget: send email if provided
+    // ── Fire-and-forget background work (user is not blocked) ──
+
+    // Archive the full transcript to S3 (cheap long-term storage).
+    archiveSession(record).catch((err) =>
+      console.error('[sessions] S3 archive failed:', err.message)
+    );
+
+    // Summarize with Bedrock, then email the recap + full transcript.
     if (record.email && record.transcript.length > 0) {
-      sendTranscriptEmail({
-        to: record.email,
-        language: record.language,
-        transcript: record.transcript,
-        agentId: record.agentId,
-      }).catch((err) => console.error('[sessions] email send failed:', err.message));
+      (async () => {
+        const summary = await summarizeTranscript(record.transcript, record.language);
+        await sendTranscriptEmail({
+          to: record.email,
+          language: record.language,
+          transcript: record.transcript,
+          summary,
+          agentId: record.agentId,
+        });
+      })().catch((err) => console.error('[sessions] email send failed:', err.message));
     }
   } catch (err) {
     console.error('[sessions] save error:', err);
