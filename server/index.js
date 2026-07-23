@@ -15,6 +15,8 @@ import { createConversation, endConversation } from './tavus.js';
 import { llmProxyHandler } from './llm-proxy.js';
 // ── Session storage (email + rating feature) ──
 import sessionsRouter from './routes/sessions.js';
+import transcriptRouter from './routes/transcript.js';
+import { getLastSources, addSseClient } from './sources-store.js';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -26,6 +28,34 @@ app.use(express.json());
 app.use((req, res, next) => {
   res.setHeader('ngrok-skip-browser-warning', 'true');
   next();
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/sources-stream — SSE endpoint
+// Frontend subscribes once; server pushes { links: [...] } after every
+// speech turn (llm-proxy.js → setLastSources → broadcast).
+// ---------------------------------------------------------------------------
+app.get('/api/sources-stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  // Keep-alive heartbeat every 20 s to prevent proxy/browser timeouts
+  const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 20000);
+  const unsubscribe = addSseClient(res);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/last-sources — one-shot fallback (returns most recent sources)
+// ---------------------------------------------------------------------------
+app.get('/api/last-sources', (req, res) => {
+  res.json({ links: getLastSources() });
 });
 
 // ---------------------------------------------------------------------------
@@ -114,8 +144,8 @@ app.post('/api/chat', async (req, res) => {
 
   try {
     const pairId = randomUUID();
-    const rawAnswer = await getChatbotResponse(message, pairId);
-    res.json({ text: rawAnswer });
+    const { text, sourcesText } = await getChatbotResponse(message, pairId);
+    res.json({ text, sourcesText });
   } catch (err) {
     console.error('[/api/chat]', err);
     if (!res.headersSent) {
