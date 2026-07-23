@@ -43,7 +43,10 @@ function getModelArn() {
 /**
  * @param {string} userText   — the user's raw question
  * @param {string} sessionId  — unique per-session ID (maintains conversation context)
- * @returns {Promise<string>} — plain-text answer from the knowledge base
+ * @returns {Promise<{ text: string, sourcesText: string }>}
+ *   text        — plain-text answer from the knowledge base
+ *   sourcesText — newline-separated list of source URIs/URLs cited by Bedrock.
+ *                 Empty string if no citations were returned.
  */
 export async function getChatbotResponse(userText, sessionId) {
   const knowledgeBaseId = process.env.BEDROCK_KNOWLEDGE_BASE_ID;
@@ -87,11 +90,38 @@ export async function getChatbotResponse(userText, sessionId) {
     const answer = response.output?.text;
     if (!answer) {
       console.warn('[chatbot] Bedrock returned no text in output');
-      return 'I could not find an answer to that question. Please contact the IT Help Desk for assistance.';
+      return {
+        text: 'I could not find an answer to that question. Please contact the IT Help Desk for assistance.',
+        sourcesText: '',
+      };
     }
 
-    console.log(`[chatbot] got ${answer.length} chars from Bedrock`);
-    return answer;
+    // Extract citations from the response.
+    // Each citation contains one or more retrievedReferences with snippet + location + metadata.
+    // Pull the URI/URL out of the location object depending on the source type.
+    const rawSources = (response.citations ?? []).flatMap(citation =>
+      (citation.retrievedReferences ?? []).map(ref => {
+        const loc = ref.location ?? {};
+        switch (loc.type) {
+          case 'S3':          return loc.s3Location?.uri ?? null;
+          case 'WEB':         return loc.webLocation?.url ?? null;
+          case 'CONFLUENCE':  return loc.confluenceLocation?.url ?? null;
+          case 'SHAREPOINT':  return loc.sharePointLocation?.url ?? null;
+          case 'SALESFORCE':  return loc.salesforceLocation?.url ?? null;
+          case 'ONEDRIVE':    return loc.oneDriveLocation?.url ?? null;
+          case 'GOOGLEDRIVE': return loc.googleDriveLocation?.url ?? null;
+          default:            return null;
+        }
+      })
+    );
+
+    // Deduplicate and drop nulls, then join as newline-separated string
+    const sourcesText = [...new Set(rawSources.filter(Boolean))].join('\n');
+
+    console.log(`[chatbot] got ${answer.length} chars from Bedrock, ${sourcesText ? sourcesText.split('\n').length : 0} source(s)`);
+    console.log(`[chatbot] raw citations:`, JSON.stringify(response.citations ?? [], null, 2));
+    console.log(`[chatbot] sourcesText:`, sourcesText || '(none)');
+    return { text: answer, sourcesText };
   } catch (err) {
     console.error('[chatbot] Bedrock error:', err.message);
     throw err;

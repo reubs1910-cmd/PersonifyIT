@@ -18,6 +18,7 @@
 import { randomUUID } from 'crypto';
 import { getChatbotResponse } from './chatbot.js';
 import { conversationalRewrite } from './rewrite.js';
+import { setLastSources } from './sources-store.js';
 
 /**
  * Extract the latest user message from an OpenAI messages array.
@@ -132,8 +133,12 @@ export async function llmProxyHandler(req, res) {
     console.log(`[llm-proxy] user said: "${userMessage.slice(0, 80)}…" (lang=${language}, model=${model || 'unknown'})`);
 
     const pairId    = randomUUID();
-    const rawAnswer = await getChatbotResponse(userMessage, pairId);
-    const spoken    = await conversationalRewrite(rawAnswer, language);
+    const { text: rawAnswer, sourcesText } = await getChatbotResponse(userMessage, pairId);
+
+    // Store sources so the frontend can fetch them after the speech turn
+    setLastSources(sourcesText ? sourcesText.split('\n').filter(Boolean) : []);
+
+    const spoken = await conversationalRewrite(rawAnswer, language);
 
     clearInterval(keepAlive);
     console.log(`[llm-proxy] streaming ${spoken.length} chars back to Tavus (lang=${language})`);
