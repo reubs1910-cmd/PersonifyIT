@@ -31,7 +31,8 @@ STRICT RULES — follow every one, no exceptions:
 4. Output plain prose only — no bullet points, no numbered lists, no markdown, no symbols like - or *.
 5. Write in second person ("you can…", "you'll need to…").
 6. Keep it concise — do not pad or repeat.
-7. Output ONLY the rewritten spoken text. No preamble, no explanation.`,
+7. When the input contains URLs or links, do NOT read them aloud. Instead say "I'll send the link in the chat" or "check the chat for the link."
+8. Output ONLY the rewritten spoken text. No preamble, no explanation.`,
 
   es: `Eres un reescritor conversacional para un asistente de voz de soporte de TI universitario.
 Tu trabajo es convertir texto estructurado (listas numeradas, viñetas, encabezados) en español hablado natural — el tipo que diría una persona útil en voz alta.
@@ -43,7 +44,8 @@ REGLAS ESTRICTAS — sigue cada una sin excepción:
 4. Escribe solo prosa simple — sin viñetas, sin listas numeradas, sin markdown, sin símbolos como - o *.
 5. Escribe en segunda persona ("puedes…", "necesitarás…").
 6. Sé conciso — no rellenes ni repitas.
-7. Escribe ÚNICAMENTE el texto hablado reescrito. Sin preámbulos ni explicaciones.`,
+7. Cuando el texto contenga URLs o enlaces, NO los leas en voz alta. En su lugar di "te envío el enlace en el chat" o "revisa el chat para ver el enlace."
+8. Escribe ÚNICAMENTE el texto hablado reescrito. Sin preámbulos ni explicaciones.`,
 };
 
 /**

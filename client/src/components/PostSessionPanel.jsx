@@ -113,6 +113,24 @@ export default function PostSessionPanel({
         <hr style={styles.divider} />
 
         <SessionRating language={language} onSubmit={handleRatingSubmit} />
+
+        <button
+          onClick={onDone}
+          style={{
+            marginTop: 12,
+            padding: '10px 24px',
+            background: 'transparent',
+            color: '#64748b',
+            border: '1px solid #c5d0dc',
+            borderRadius: 8,
+            fontSize: '0.85rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            alignSelf: 'center',
+          }}
+        >
+          No thanks
+        </button>
       </div>
     </div>
   );

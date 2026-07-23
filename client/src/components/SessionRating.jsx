@@ -51,6 +51,7 @@ const styles = {
     border: 'none',
     padding: 0,
     transition: 'transform 0.1s',
+    color: '#d4a017',
   },
   reasonInput: {
     width: '100%',

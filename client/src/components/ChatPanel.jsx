@@ -43,6 +43,13 @@ const styles = {
     background: '#fff',
     overflow: 'hidden',
   },
+  panelFull: {
+    display: 'flex',
+    flexDirection: 'column',
+    flex: 1,
+    background: '#fff',
+    overflow: 'hidden',
+  },
   history: {
     flex: 1,
     overflowY: 'auto',
@@ -142,6 +149,8 @@ export default function ChatPanel({
   onConversationLoading,
   onConversationError,
   onMessagesChange, // ── (email/transcript feature) optional: emits message list upward
+  fullWidth,
+  mode,
 }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput]       = useState('');
@@ -244,7 +253,7 @@ export default function ChatPanel({
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, language }),
+        body: JSON.stringify({ message: text, language, mode: mode || 'video' }),
       });
 
       if (!res.ok) throw new Error(`Server error: ${res.status}`);
@@ -279,7 +288,7 @@ export default function ChatPanel({
   }
 
   return (
-    <div style={styles.panel}>
+    <div style={fullWidth ? styles.panelFull : styles.panel}>
       <div style={styles.history}>
         {messages.map((msg, i) => {
           if (msg.role === 'sources') {

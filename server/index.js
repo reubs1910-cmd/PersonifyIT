@@ -137,9 +137,8 @@ app.post('/api/chat', async (req, res) => {
   if (!message || typeof message !== 'string') {
     return res.status(400).json({ error: 'message is required' });
   }
-  if (!['en', 'es'].includes(language)) {
-    return res.status(400).json({ error: 'language must be "en" or "es"' });
-  }
+
+  const lang = ['en', 'es'].includes(language) ? language : 'en';
 
   try {
     const pairId = randomUUID();

@@ -1,7 +1,7 @@
 /**
- * LanguageSelect
- * Full-screen language gate shown before any interaction.
- * Calls onSelect('en') or onSelect('es') and is then unmounted by App.
+ * ModeSelect
+ * Full-screen gate shown before any interaction.
+ * Calls onSelect('video') or onSelect('text') and is then unmounted by App.
  */
 
 const styles = {
@@ -41,41 +41,42 @@ const styles = {
     border: '2px solid #1a3a5c',
     cursor: 'pointer',
     transition: 'all 0.15s ease',
-    minWidth: 180,
+    minWidth: 200,
+    textAlign: 'center',
   },
-  english: {
+  video: {
     background: '#1a3a5c',
     color: '#fff',
   },
-  spanish: {
+  text: {
     background: '#fff',
     color: '#1a3a5c',
   },
 };
 
-export default function LanguageSelect({ onSelect }) {
+export default function ModeSelect({ onSelect }) {
   return (
     <div style={styles.overlay}>
       <h1 style={styles.heading}>Welcome to PersonifyIT</h1>
       <p style={styles.sub}>
-        Please choose your language. / Por favor elige tu idioma.
+        How would you like to get help today?
       </p>
       <div style={styles.buttonRow}>
         <button
-          style={{ ...styles.button, ...styles.english }}
-          onClick={() => onSelect('en')}
+          style={{ ...styles.button, ...styles.video }}
+          onClick={() => onSelect('video')}
           onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
           onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
         >
-          🇺🇸 &nbsp;English
+          🎥 &nbsp;Video Assistant
         </button>
         <button
-          style={{ ...styles.button, ...styles.spanish }}
-          onClick={() => onSelect('es')}
+          style={{ ...styles.button, ...styles.text }}
+          onClick={() => onSelect('text')}
           onMouseEnter={e => (e.currentTarget.style.background = '#eef2f7')}
           onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
         >
-          🇲🇽 &nbsp;Español
+          💬 &nbsp;Text Chat
         </button>
       </div>
     </div>

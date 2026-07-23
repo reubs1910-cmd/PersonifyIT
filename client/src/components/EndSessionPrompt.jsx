@@ -129,9 +129,6 @@ export default function EndSessionPrompt({ language = 'en', onProvide, onDecline
       />
       {error && <p style={styles.error}>{error}</p>}
       <div style={styles.row}>
-        <button style={styles.declineBtn} onClick={onDecline}>
-          {t.decline}
-        </button>
         <button style={styles.sendBtn} onClick={handleSend}>
           {t.send}
         </button>
