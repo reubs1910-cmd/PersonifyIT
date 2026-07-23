@@ -2,6 +2,8 @@ import { useState } from 'react';
 import LanguageSelect from './components/LanguageSelect.jsx';
 import ChatPanel from './components/ChatPanel.jsx';
 import VideoPanel from './components/VideoPanel.jsx';
+// ── Post-session rating (email + rating feature) ──
+import SessionRating from './components/SessionRating.jsx';
 
 const styles = {
   app: {
@@ -45,6 +47,8 @@ export default function App() {
   const [conversationUrl, setConversationUrl]         = useState(null);
   const [conversationLoading, setConversationLoading] = useState(false);
   const [conversationError, setConversationError]     = useState(null);
+  // ── Post-session rating state ──
+  const [sessionEnded, setSessionEnded]               = useState(false);
 
   function handleLanguageSelect(lang) {
     setLanguage(lang);
@@ -134,6 +138,43 @@ export default function App() {
           }}
         />
       </main>
+
+      {/* ── Post-session rating (email + rating feature) ───────────────── */}
+      {sessionEnded ? (
+        <SessionRating
+          language={language}
+          onSubmit={(rating, reason) => {
+            fetch('/api/sessions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                agentId: 'alex-it-support',
+                language,
+                rating,
+                lowRatingReason: reason,
+                transcript: [],
+              }),
+            }).catch(() => {});
+          }}
+        />
+      ) : (
+        <button
+          onClick={() => setSessionEnded(true)}
+          style={{
+            flexShrink: 0,
+            padding: '10px 0',
+            background: '#eef2f7',
+            border: 'none',
+            borderTop: '1px solid #d1dde8',
+            color: '#1a3a5c',
+            cursor: 'pointer',
+            fontSize: '0.85rem',
+            fontWeight: 600,
+          }}
+        >
+          {language === 'en' ? 'End Session' : 'Finalizar sesión'}
+        </button>
+      )}
     </div>
   );
 }
