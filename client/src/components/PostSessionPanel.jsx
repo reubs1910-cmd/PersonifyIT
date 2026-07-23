@@ -67,27 +67,32 @@ export default function PostSessionPanel({
   agentId = 'alex-it-support',
   onDone,
 }) {
-  const transcriptStored = useRef(false);
+  // Store the email when provided (transcript still goes with the rating submit)
+  const emailRef = useRef(null);
 
-  // Store the transcript at most once (email may be null if declined/skipped).
-  function storeTranscript(email) {
-    if (transcriptStored.current) return;
-    transcriptStored.current = true;
-    fetch('/api/transcript', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId, agentId, language, email, transcript }),
-    }).catch((err) => console.error('[PostSessionPanel] transcript save failed:', err));
+  function handleEmailProvide(email) {
+    emailRef.current = email;
+  }
+
+  function handleEmailDecline() {
+    emailRef.current = null;
   }
 
   function handleRatingSubmit(rating, lowRatingReason) {
-    // Ensure the transcript is captured even if the user ignored the email prompt.
-    storeTranscript(null);
+    // Single POST — everything in one record
     fetch('/api/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId, agentId, language, rating, lowRatingReason }),
-    }).catch((err) => console.error('[PostSessionPanel] rating save failed:', err));
+      body: JSON.stringify({
+        sessionId,
+        agentId,
+        language,
+        email: emailRef.current,
+        rating,
+        lowRatingReason,
+        transcript,
+      }),
+    }).catch((err) => console.error('[PostSessionPanel] save failed:', err));
 
     if (onDone) setTimeout(onDone, 1500);
   }
@@ -101,8 +106,8 @@ export default function PostSessionPanel({
 
         <EndSessionPrompt
           language={language}
-          onProvide={(email) => storeTranscript(email)}
-          onDecline={() => storeTranscript(null)}
+          onProvide={handleEmailProvide}
+          onDecline={handleEmailDecline}
         />
 
         <hr style={styles.divider} />
