@@ -11,7 +11,6 @@ import express from 'express';
 import cors from 'cors';
 import { randomUUID } from 'crypto';
 import { getChatbotResponse } from './chatbot.js';
-import { conversationalRewrite } from './rewrite.js';
 import { createConversation, endConversation } from './tavus.js';
 import { llmProxyHandler } from './llm-proxy.js';
 
@@ -114,8 +113,7 @@ app.post('/api/chat', async (req, res) => {
   try {
     const pairId = randomUUID();
     const rawAnswer = await getChatbotResponse(message, pairId);
-    const spokenText = await conversationalRewrite(rawAnswer, language);
-    res.json({ text: spokenText });
+    res.json({ text: rawAnswer });
   } catch (err) {
     console.error('[/api/chat]', err);
     if (!res.headersSent) {
