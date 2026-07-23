@@ -1,95 +1,167 @@
 /**
- * db.js — Flat-file JSON store for session data (rating + transcript).
+ * db.js — DynamoDB store for session data.
  *
- * Stores sessions in server/data/sessions.json.
- * No external DB dependency — easy to swap for a real DB later.
- * Only this file and routes/sessions.js know about the storage format.
+ * Single table (PersonifyIT-Sessions) shared by two independent features,
+ * kept separate INSIDE the table via a `recordType` discriminator:
+ *
+ *   recordType: "rating"      → { rating, lowRatingReason }        (rating feature)
+ *   recordType: "transcript"  → { email, transcript }             (email feature)
+ *
+ * Both record types share a `sessionId` so they can be correlated later.
+ * Each row's partition key `id` is unique per record.
+ *
+ * All persistence lives behind this one module — to swap DynamoDB for
+ * Postgres later, only this file changes.
+ *
+ * Environment variables (DYNAMO_ prefix, separate from Bedrock creds):
+ *   DYNAMO_ACCESS_KEY_ID, DYNAMO_SECRET_ACCESS_KEY, DYNAMO_SESSION_TOKEN (optional)
+ *   DYNAMO_REGION, DYNAMO_TABLE_NAME
  */
 
-import { readFile, writeFile, mkdir } from 'fs/promises';
-import { existsSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import {
+  DynamoDBDocumentClient,
+  PutCommand,
+  ScanCommand,
+} from '@aws-sdk/lib-dynamodb';
 import { randomUUID } from 'crypto';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = join(__dirname, 'data');
-const SESSIONS_FILE = join(DATA_DIR, 'sessions.json');
+// ─── Client setup ─────────────────────────────────────────────────────────────
 
-async function ensureFile() {
-  if (!existsSync(DATA_DIR)) {
-    await mkdir(DATA_DIR, { recursive: true });
-  }
-  if (!existsSync(SESSIONS_FILE)) {
-    await writeFile(SESSIONS_FILE, '[]', 'utf-8');
-  }
-}
+const credentials = {
+  accessKeyId: process.env.DYNAMO_ACCESS_KEY_ID,
+  secretAccessKey: process.env.DYNAMO_SECRET_ACCESS_KEY,
+  ...(process.env.DYNAMO_SESSION_TOKEN && {
+    sessionToken: process.env.DYNAMO_SESSION_TOKEN,
+  }),
+};
 
-async function readSessions() {
-  await ensureFile();
-  const raw = await readFile(SESSIONS_FILE, 'utf-8');
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return [];
-  }
-}
+const client = new DynamoDBClient({
+  region: process.env.DYNAMO_REGION || 'us-west-2',
+  credentials,
+});
 
-async function writeSessions(sessions) {
-  await ensureFile();
-  await writeFile(SESSIONS_FILE, JSON.stringify(sessions, null, 2), 'utf-8');
-}
+const docClient = DynamoDBDocumentClient.from(client);
+const TABLE_NAME = process.env.DYNAMO_TABLE_NAME || 'PersonifyIT-Sessions';
+
+// Record type discriminators — keep the two features' data separate in one table.
+export const RECORD_TYPES = {
+  RATING: 'rating',
+  TRANSCRIPT: 'transcript',
+};
+
+// ─── Rating feature ───────────────────────────────────────────────────────────
 
 /**
- * Save a completed session.
+ * Save a rating record (rating feature).
  *
  * @param {object} data
+ * @param {string} [data.sessionId]  — correlates with the transcript record
+ * @param {string} data.agentId
+ * @param {string} data.language
+ * @param {number} data.rating        — 1–5
+ * @param {string|null} data.lowRatingReason
+ * @returns {object} the saved record
+ */
+export async function saveSession(data) {
+  const record = {
+    id: randomUUID(),
+    recordType: RECORD_TYPES.RATING,
+    sessionId: data.sessionId || null,
+    agentId: data.agentId || 'alex-it-support',
+    language: data.language || 'en',
+    rating: data.rating,
+    lowRatingReason: data.lowRatingReason || null,
+    createdAt: new Date().toISOString(),
+  };
+
+  await docClient.send(new PutCommand({ TableName: TABLE_NAME, Item: record }));
+  console.log(`[db] rating ${record.id} saved (rating=${record.rating}, session=${record.sessionId})`);
+  return record;
+}
+
+// ─── Email / transcript feature ─────────────────────────────────────────────
+
+/**
+ * Save a transcript record (email feature).
+ *
+ * @param {object} data
+ * @param {string} [data.sessionId]  — correlates with the rating record
  * @param {string} data.agentId
  * @param {string} data.language
  * @param {string|null} data.email
- * @param {number} data.rating        — 1–5
- * @param {string|null} data.lowRatingReason
  * @param {Array} data.transcript      — [{ role, text, ts }]
- * @returns {object} the saved session (with id + createdAt)
+ * @returns {object} the saved record
  */
-export async function saveSession(data) {
-  const session = {
+export async function saveTranscript(data) {
+  const record = {
     id: randomUUID(),
+    recordType: RECORD_TYPES.TRANSCRIPT,
+    sessionId: data.sessionId || null,
     agentId: data.agentId || 'alex-it-support',
     language: data.language || 'en',
     email: data.email || null,
-    rating: data.rating,
-    lowRatingReason: data.lowRatingReason || null,
     transcript: data.transcript || [],
     createdAt: new Date().toISOString(),
   };
 
-  const sessions = await readSessions();
-  sessions.push(session);
-  await writeSessions(sessions);
+  await docClient.send(new PutCommand({ TableName: TABLE_NAME, Item: record }));
+  console.log(`[db] transcript ${record.id} saved (email=${record.email ? 'yes' : 'none'}, msgs=${record.transcript.length}, session=${record.sessionId})`);
+  return record;
+}
 
-  return session;
+// ─── Reads ────────────────────────────────────────────────────────────────────
+
+/**
+ * Get rating records, optionally filtered by rating range.
+ */
+export async function getSessions(filters = {}) {
+  const expressions = ['recordType = :rt'];
+  const exprValues = { ':rt': RECORD_TYPES.RATING };
+
+  if (filters.minRating != null) {
+    expressions.push('rating >= :minR');
+    exprValues[':minR'] = filters.minRating;
+  }
+  if (filters.maxRating != null) {
+    expressions.push('rating <= :maxR');
+    exprValues[':maxR'] = filters.maxRating;
+  }
+
+  const result = await docClient.send(
+    new ScanCommand({
+      TableName: TABLE_NAME,
+      FilterExpression: expressions.join(' AND '),
+      ExpressionAttributeValues: exprValues,
+    })
+  );
+
+  const sessions = result.Items || [];
+  sessions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  return sessions;
 }
 
 /**
- * Get stored sessions, optionally filtered by rating range.
- *
- * @param {object} filters
- * @param {number} [filters.minRating]
- * @param {number} [filters.maxRating]
- * @returns {Array} matching sessions
+ * Get transcript records (email feature). Optionally only those with an email.
  */
-export async function getSessions(filters = {}) {
-  let sessions = await readSessions();
+export async function getTranscripts(filters = {}) {
+  const expressions = ['recordType = :rt'];
+  const exprValues = { ':rt': RECORD_TYPES.TRANSCRIPT };
 
-  if (filters.minRating != null) {
-    sessions = sessions.filter(s => s.rating >= filters.minRating);
-  }
-  if (filters.maxRating != null) {
-    sessions = sessions.filter(s => s.rating <= filters.maxRating);
+  if (filters.withEmailOnly) {
+    expressions.push('attribute_exists(email) AND email <> :null');
+    exprValues[':null'] = null;
   }
 
-  // Most recent first
-  sessions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  return sessions;
+  const result = await docClient.send(
+    new ScanCommand({
+      TableName: TABLE_NAME,
+      FilterExpression: expressions.join(' AND '),
+      ExpressionAttributeValues: exprValues,
+    })
+  );
+
+  const transcripts = result.Items || [];
+  transcripts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  return transcripts;
 }

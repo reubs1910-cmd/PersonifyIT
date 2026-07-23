@@ -1,10 +1,10 @@
 /**
- * routes/sessions.js — Session storage API (rating + transcript feature)
+ * routes/sessions.js — Rating API (rating feature)
  *
- * POST /api/sessions  — save a completed session (transcript + rating + email)
- * GET  /api/sessions  — read stored sessions, filterable by rating
+ * POST /api/sessions  — save a rating (rating + reason + sessionId)
+ * GET  /api/sessions  — read ratings, filterable by rating range
  *
- * This file is self-contained. Only touches db.js for persistence.
+ * Transcript + email are handled separately in routes/transcript.js.
  */
 
 import { Router } from 'express';
@@ -14,37 +14,32 @@ const router = Router();
 
 /**
  * POST /api/sessions
- * Body: { agentId, language, email?, rating, lowRatingReason?, transcript }
+ * Body: { sessionId?, agentId, language, rating, lowRatingReason? }
  */
 router.post('/api/sessions', async (req, res) => {
-  const { agentId, language, email, rating, lowRatingReason, transcript } = req.body;
+  const { sessionId, agentId, language, rating, lowRatingReason } = req.body;
 
   if (!rating || rating < 1 || rating > 5) {
     return res.status(400).json({ error: 'rating must be 1–5' });
   }
-  if (!Array.isArray(transcript)) {
-    return res.status(400).json({ error: 'transcript must be an array' });
-  }
 
   try {
-    const session = await saveSession({
+    const record = await saveSession({
+      sessionId,
       agentId,
       language,
-      email: email || null,
       rating,
       lowRatingReason: rating <= 2 ? (lowRatingReason || null) : null,
-      transcript,
     });
-    res.status(201).json({ session });
+    res.status(201).json({ session: record });
   } catch (err) {
     console.error('[sessions] save error:', err);
-    res.status(500).json({ error: 'Failed to save session' });
+    res.status(500).json({ error: 'Failed to save rating' });
   }
 });
 
 /**
  * GET /api/sessions?minRating=1&maxRating=2
- * Returns sessions filtered by rating range. Defaults to all.
  */
 router.get('/api/sessions', async (req, res) => {
   const minRating = req.query.minRating ? parseInt(req.query.minRating, 10) : undefined;
@@ -55,7 +50,7 @@ router.get('/api/sessions', async (req, res) => {
     res.json({ sessions, count: sessions.length });
   } catch (err) {
     console.error('[sessions] read error:', err);
-    res.status(500).json({ error: 'Failed to read sessions' });
+    res.status(500).json({ error: 'Failed to read ratings' });
   }
 });
 
