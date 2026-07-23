@@ -1,5 +1,3 @@
-import { useEffect } from 'react';
-
 /**
  * VideoPanel
  * Left-hand pane displaying the Tavus CVI talking-head conversation.
@@ -120,7 +118,6 @@ if (typeof document !== 'undefined') {
 }
 
 export default function VideoPanel({ conversationUrl, language, loading, error, onStart }) {
-
   // Live CVI session — embed the Tavus conversation URL
   if (conversationUrl) {
     return (
