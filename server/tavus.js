@@ -84,32 +84,30 @@ async function createPal(apiKey, replicaId, language, publicUrl, proxyKey) {
   const lang = ['en', 'es'].includes(language) ? language : 'en';
 
   const body = {
-    pal_name: `personifyit-${lang}-${Date.now()}`,
+    persona_name: `personifyit-${lang}-${Date.now()}`,
     system_prompt: SYSTEM_PROMPTS[lang],
-    default_face_id: replicaId,
+    default_replica_id: replicaId,
     layers: {
       llm: {
         model: `hartnell-chatbot-${lang}`,
-        base_url: publicUrl,
+        // Tavus appends "/chat/completions" to base_url; our proxy lives at
+        // /v2/chat/completions, so base_url must end in "/v2".
+        base_url: `${publicUrl}/v2`,
         api_key: proxyKey || 'no-key',
         speculative_inference: false,
-        extra_headers: {
-          'ngrok-skip-browser-warning': 'true',
-          'User-Agent': 'TavusCVI/1.0',
-        },
       },
     },
   };
 
-  console.log(`[tavus] creating PAL with custom LLM → ${publicUrl}`);
-  const result = await tavusRequest('POST', '/v2/pals', apiKey, body);
+  console.log(`[tavus] creating persona with custom LLM → ${publicUrl}/v2`);
+  const result = await tavusRequest('POST', '/v2/personas', apiKey, body);
 
-  if (!result.pal_id) {
-    throw new Error(`Tavus PAL creation failed: ${JSON.stringify(result)}`);
+  if (!result.persona_id) {
+    throw new Error(`Tavus persona creation failed: ${JSON.stringify(result)}`);
   }
 
-  console.log(`[tavus] PAL created: ${result.pal_id}`);
-  return result.pal_id;
+  console.log(`[tavus] persona created: ${result.persona_id}`);
+  return result.persona_id;
 }
 
 /**
@@ -118,8 +116,8 @@ async function createPal(apiKey, replicaId, language, publicUrl, proxyKey) {
 async function deletePal(apiKey, palId) {
   if (!apiKey || !palId) return;
   try {
-    await tavusRequest('DELETE', `/v2/pals/${palId}`, apiKey);
-    console.log(`[tavus] PAL deleted: ${palId}`);
+    await tavusRequest('DELETE', `/v2/personas/${palId}`, apiKey);
+    console.log(`[tavus] persona deleted: ${palId}`);
   } catch (err) {
     console.warn(`[tavus] could not delete PAL ${palId}: ${err.message}`);
   }
@@ -171,8 +169,8 @@ export async function createConversation(language) {
     // Custom LLM mode — create a PAL pointing at our proxy
     try {
       palId = await createPal(apiKey, replicaId, lang, publicUrl, proxyKey);
-      body.pal_id = palId;
-      // PAL has default_face_id set, no need to pass replica_id separately
+      body.persona_id = palId;
+      body.replica_id = replicaId; // persona's default_replica_id also set; explicit is safe
     } catch (err) {
       console.warn(`[tavus] PAL creation failed, falling back to built-in LLM: ${err.message}`);
       palId = null;
