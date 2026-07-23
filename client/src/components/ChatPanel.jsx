@@ -89,19 +89,6 @@ const styles = {
     borderBottomLeftRadius: 3,
     fontStyle: 'italic',
   },
-  sourcesBubble: {
-    alignSelf: 'flex-start',
-    background: '#f0f4f8',
-    color: '#4a5568',
-    borderRadius: 12,
-    borderBottomLeftRadius: 3,
-    fontSize: '0.82rem',
-    lineHeight: 1.6,
-    borderLeft: '3px solid #a0aec0',
-    maxWidth: '78%',
-    padding: '10px 14px',
-    wordBreak: 'break-word',
-  },
   inputRow: {
     display: 'flex',
     gap: 10,
@@ -155,22 +142,6 @@ export default function ChatPanel({
   useEffect(() => {
     if (onMessagesChange) onMessagesChange(messages);
   }, [messages, onMessagesChange]);
-
-  // ── SSE: append sources bubble whenever the avatar finishes a speech turn ─
-  useEffect(() => {
-    const es = new EventSource('/api/sources-stream');
-
-    es.onmessage = (event) => {
-      try {
-        const { links } = JSON.parse(event.data);
-        if (links?.length) {
-          setMessages(prev => [...prev, { role: 'sources', links }]);
-        }
-      } catch { /* malformed event — ignore */ }
-    };
-
-    return () => es.close();
-  }, []);
 
   // ── Start CVI session when sessionStarted flips to true ───────────────────
   useEffect(() => {
@@ -249,13 +220,7 @@ export default function ChatPanel({
 
       if (!res.ok) throw new Error(`Server error: ${res.status}`);
       const data = await res.json();
-
-      const next = [{ role: 'bot', text: data.text }];
-      if (data.sourcesText) {
-        const links = data.sourcesText.split('\n').filter(Boolean);
-        next.push({ role: 'sources', links });
-      }
-      setMessages(prev => [...prev, ...next]);
+      setMessages(prev => [...prev, { role: 'bot', text: data.text }]);
     } catch (err) {
       setMessages(prev => [
         ...prev,
@@ -282,29 +247,6 @@ export default function ChatPanel({
     <div style={styles.panel}>
       <div style={styles.history}>
         {messages.map((msg, i) => {
-          if (msg.role === 'sources') {
-            const label = language === 'es' ? '📄 Fuentes' : '📄 Sources';
-            return (
-              <div key={i} style={{ ...styles.bubble, ...styles.sourcesBubble }}>
-                <div style={{ fontWeight: 600, marginBottom: 6 }}>{label}</div>
-                <ol style={{ margin: 0, paddingLeft: 18 }}>
-                  {msg.links.map((url, j) => (
-                    <li key={j} style={{ marginBottom: 4 }}>
-                      <a
-                        href={url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: '#2b6cb0', wordBreak: 'break-all' }}
-                      >
-                        {url}
-                      </a>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            );
-          }
-
           const style =
             msg.role === 'user'   ? { ...styles.bubble, ...styles.userBubble }   :
             msg.role === 'system' ? { ...styles.bubble, ...styles.systemBubble } :
