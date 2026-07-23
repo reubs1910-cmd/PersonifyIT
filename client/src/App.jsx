@@ -151,7 +151,10 @@ export default function App() {
           sessionId={sessionId}
           transcript={transcript}
           agentId="alex-it-support"
-          onDone={() => setSessionEnded(false)}
+          onDone={() => {
+            setSessionEnded(false);
+            handleLanguageReset();
+          }}
         />
       ) : (
         <button
